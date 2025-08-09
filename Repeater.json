@@ -1,0 +1,152 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-gym-agent",
+        "options": {}
+      },
+      "id": "2dafc2bc-b517-44c6-a88c-cfc0c9499566",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        3020,
+        1480
+      ],
+      "webhookId": "c9e3ad96-e011-4292-b61e-d95bd7618b3c"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4o",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are “City-Planner-v2”.   Always respond with **raw JSON only (no back-ticks, no prose)** and strictly follow this schema:  {   \"preferences\": \"<string,   e.g. '24-hour access, spin classes'>\",   \"searchText\":  \"<string,   e.g. 'gym'>\",   \"cities\":      [       \"<City, ST>\",   // 1       \"<City, ST>\"    // 2       ...   ] }  Rules 1. When the user says:      • region = R (U.S. state list or region name)      • count  = N (desired number of email drafts)      compute **C = roundUp(N / 10)** and return **exactly C unique cities** from region R.   2. All strings must be plain UTF-8, no line breaks inside fields.   3. Never add additional keys or commentary.  "
+            },
+            {
+              "content": "=Region: {{ $json.region || $json[\"body\"][\"region\"] || \"Southeast USA\" }} Drafts needed: {{ $json.count  || $json[\"body\"][\"count\"]  || 120 }} Preferences: {{ $json.preferences || $json[\"body\"][\"preferences\"] || \"24-hour access, spin classes\" }} Search text: {{ $json.searchText || $json[\"body\"][\"searchText\"] || \"gym\" }}"
+            }
+          ]
+        },
+        "options": {},
+        "requestOptions": {}
+      },
+      "id": "5e74deaf-08a5-4a34-bfa3-0ac22dd0952f",
+      "name": "AI City Planner1",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        3240,
+        1480
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "OKvwqaD9NTC097nH",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// 1. Get the raw string from the OpenAI node\nlet raw = items[0].json.choices[0].message.content;\n\n// 2. Strip ```json fences if the model sent them\nraw = raw.replace(/```json|```/g, '').trim();\n\n// 3. Parse to an object\nconst data = JSON.parse(raw);\n\n// 4. Turn each city into its own item, keeping the shared prefs / search text\nreturn data.cities.map(city => ({\n  json: {\n    city,\n    preferences: data.preferences,\n    searchText: data.searchText || 'gym'\n  }\n}));\n"
+      },
+      "id": "ce33d0d2-d92f-493f-8130-e2476a694137",
+      "name": "Parse Cities1",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        3460,
+        1480
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "0dc3fbd5-db8c-4fbb-be01-9dae83ca656d",
+      "name": "Split Cities2",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        3680,
+        1480
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "Call Make ten emails",
+        "options": {}
+      },
+      "id": "c2b2c357-c2de-415d-a6d4-4d809d60964c",
+      "name": "Call Make ten emails2",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        3900,
+        1480
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI City Planner1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI City Planner1": {
+      "main": [
+        [
+          {
+            "node": "Parse Cities1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Cities1": {
+      "main": [
+        [
+          {
+            "node": "Split Cities2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Cities2": {
+      "main": [
+        [
+          {
+            "node": "Call Make ten emails2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "89a69b97-d43e-4907-b7f8-f0ed2c8c668c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e6d9133ca8876c68794cae16d8544151e457393660a3caa96a8a485c7b53676e"
+  },
+  "id": "1LArTe3g0VeMwqbV",
+  "tags": []
+}

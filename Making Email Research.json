@@ -1,0 +1,1001 @@
+{
+  "name": "Make ten emails",
+  "nodes": [
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are an email-tone enhancer.\n\n1. You will receive a JSON object with keys:\n   template, name, address, website, email, city, preferences.\n2. Replace {{placeholders}} in “template” with the values.\n   • If “name” is empty use “nameAlt”, but strip words such as \n     “|”, “Home Page”, “Austin TX”, etc.\n3. Return **the same JSON** plus a new key \"new_message\" that\n   contains the improved email body.\n4. Remove the original “template” key.\n5. End the email with:\n\nKadin El Bakkouri  \nVice-President of Marketing  \nOneClick Health  \nkazentoc@gmail.com\n\nRespond with *JSON only* – no markdown fences or commentary. make sure to carry over the toEmail key",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.template }},\n{{ $json.name }},\n{{ $json.nameAlt }},\n{{ $json.address }},\n{{ $json.email }},\n{{ $json.toEmail }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        3960,
+        1300
+      ],
+      "id": "6ed4dc27-4900-48b0-8421-56ed84b1c01c",
+      "name": "Message a model",
+      "retryOnFail": true,
+      "alwaysOutputData": true,
+      "executeOnce": false,
+      "credentials": {
+        "openAiApi": {
+          "id": "OKvwqaD9NTC097nH",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "subject": "Fitness App Collaboration",
+        "message": "={{ JSON.parse(\n     $json[\"message\"][\"content\"]\n       .replace(/```json|```/g,'')\n   ).new_message }} ",
+        "additionalFields": {
+          "toList": [
+            "={{ $json.toEmail || '' }}\n",
+            "={{ $json.email || '' }}"
+          ]
+        }
+      },
+      "id": "eda00325-ffd7-4d01-812a-076cfc5afc25",
+      "name": "Create Draft1",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [
+        4520,
+        1240
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "dbE3JjBlhAhFdI2P",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Grab the HTML string that Fetch HTML1 put in item.json.data\nconst html = item.json.data || '';\n\n// Find the first email address\nconst match = html.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);\n\n// Add it to the current item\nitem.json.email = match ? match[0] : null;\n\nreturn item;\n\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3440,
+        1140
+      ],
+      "id": "3130e80a-2aa1-47da-b0ff-a9054d080663",
+      "name": "Extract Email"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse the assistant’s JSON string\nconst obj = JSON.parse(\n  $json.message.content.replace(/```json|```/g, '')\n);\n\n// expose fields we need later 💡\nitem.json.new_message = obj.new_message;\nitem.json.toEmail     = obj.toEmail;   // <- add this line\nitem.json.email = \nobj.email;\n\nreturn item;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4340,
+        1240
+      ],
+      "id": "29fdfcfc-f33e-4073-917b-0f25ec592f96",
+      "name": "Proper Email Draft",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Code node – Run once for each item\nif (item.json.Email) {                       // comes from your HTML extractor\n  const match = item.json.Email\n                 .replace(/^mailto:/i, '')   // drop “mailto:”\n                 .split('?')[0]              // drop anything after “?”\n                 .trim();\n  item.json.toEmail = match;                 // new, clean field\n}\nreturn item;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3560,
+        1140
+      ],
+      "id": "10bc5181-eae5-4764-8b07-116faf9754dc",
+      "name": "Clean Email"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d7347f06-4647-4d4b-a2aa-719dc832f6c7",
+              "name": "email",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "006d013d-4355-4cd3-b42c-5ee76a66039a",
+              "name": "note",
+              "value": "Blocked by Cloudflare",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3460,
+        960
+      ],
+      "id": "07e04a79-30fc-450d-9875-b079cb92aee4",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Code node – “Run once for EACH item” mode\n// -------------------------------------------------\n\n// 1) Build the Gmail Draft URL\n//    Draft ID can be at `id` OR at `message.id` depending on how you mapped\nconst draftId =\n  $json.id || // what Create Draft returns if “Simplify” is ON\n  ($json.message && $json.message.id); // if “Simplify” is OFF\n\nconst draftUrl = draftId\n  ? `https://mail.google.com/mail/u/0/#drafts?compose=${draftId}`\n  : '(draft error)';\n\n// 2) Pass the data you’ll append to Sheets\nreturn {\n  json: {\n    Gym_Name:   $json.name,          // made earlier in your flow\n    Website:    $json.website,\n    Email:      $json.email,\n    Draft_URL:  draftUrl\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        1080
+      ],
+      "id": "b20dd75a-7025-4ca8-bc16-eecf20f86908",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "options": {
+          "fullResponse": false
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-Goog-Api-Key",
+              "value": "AIzaSyCqm71whKMggrdZnWXGWbRmF4Tl9eCf70w"
+            },
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "=places.displayName,places.formattedAddress,places.websiteUri"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "textQuery",
+              "value": "=={{ $json.city ? $json.city + ' ' : '' }}{{ $json.searchText }}"
+            },
+            {
+              "name": "maxResultCount",
+              "value": "10000"
+            }
+          ]
+        }
+      },
+      "id": "7f01c211-1567-4ed1-8d82-e125d78627af",
+      "name": "Places Search1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        1020
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const gyms = $json.places.slice(0, 10000).map(p => ({\n  name: p.displayName.text,\n  address: p.formattedAddress,\n  website: p.websiteUri || null,\n  city: $json.city,\n  preferences: $json.preferences\n}));\nreturn gyms.map(g => ({ json: g }));\n"
+      },
+      "id": "18a49fa6-2820-46af-a1d7-697bb6921700",
+      "name": "Pick Top ",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        1020
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "ec30ce52-bf64-4ae5-9aa1-9488359cdaff",
+      "name": "Split1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        2260,
+        1020
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.website}}",
+        "allowUnauthorizedCerts": true,
+        "responseFormat": "string",
+        "options": {
+          "ignoreResponseCode": true
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {}
+          ]
+        }
+      },
+      "id": "3af492db-0473-46ef-9821-13b9348421d6",
+      "name": "Fetch HTML1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2620,
+        1020
+      ],
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const result = $json;           // current item’s JSON\n\nreturn {\n  json: {\n    name:        result.displayName?.text || result.name || null,\n    website:     result.websiteUri       || result.website || null,\n    address:     result.formattedAddress || result.address || null,\n    city:        result.city,\n    preferences: result.preferences,\n    place_id:    result.id || result.place_id || null\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        1020
+      ],
+      "id": "d6dc9dae-0e98-4adb-ba78-b7629256fa34",
+      "name": "Code B"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "name",
+              "cssSelector": "meta[property=\"og:site_name\"]"
+            },
+            {
+              "key": "nameAlt",
+              "cssSelector": "title"
+            },
+            {
+              "key": "address",
+              "cssSelector": ".textwidget[href*=\"maps.google\"]"
+            },
+            {
+              "key": "Website",
+              "cssSelector": "link[rel=\"canonical\"]",
+              "returnValue": "attribute",
+              "attribute": "href"
+            },
+            {
+              "key": "Email",
+              "cssSelector": "a[href^=\"mailto\"]",
+              "returnValue": "attribute",
+              "attribute": "href"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        3320,
+        1140
+      ],
+      "id": "f433a0a9-d902-4661-b06c-aaa98e3a9e82",
+      "name": "HTML"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "508eadd0-8f22-43fa-88dd-0b74378499b2",
+              "leftValue": "={{  !$json.error                      /* no error object            */\n   && $json.statusCode === 200        /* HTTP 200                   */\n   && typeof $json.data === 'string'  /* the page-source field      */\n   && !$json.data.includes('cf_chl_opt')  /* not a Cloudflare stub  */\n}}\n",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2840,
+        1020
+      ],
+      "id": "e2018aa8-96ff-43d5-9138-f6e23552f32c",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "406bb99a-a133-4985-a39a-dacba17a5ecb",
+      "name": "Return1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        4800,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3980,
+        880
+      ],
+      "id": "af408cb8-cbf1-4112-b729-074c097813da",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// mode: Run once for each item\nitem.json.body = item.json.template\n  .replace(/{{gym_name}}/gi,   item.json.name      || '')\n  .replace(/{{address}}/gi,    item.json.address   || '')\n  .replace(/{{website}}/gi,    item.json.website   || '')\n  .replace(/{{email}}/gi,      item.json.email     || '')\n  .replace(/{{toEmail}}/gi,\nitem.json.toEmail   || '')\n  .replace(/{{city}}/gi, \nitem.json.city      || '')\n\n  .replace(/{{preferences}}/gi,item.json.preferences || '');\n\nreturn item;     // <-- don’t forget this\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3680,
+        860
+      ],
+      "id": "a9ce95ba-418f-40b6-a7a1-f0f274d1d904",
+      "name": "String Processing"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3280,
+        860
+      ],
+      "id": "be2984a0-0c49-43df-9713-b94f90d784d6",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "list",
+        "useQueryString": true,
+        "queryString": "=name = 'email-template' and mimeType = 'application/vnd.google-apps.document'",
+        "limit": 1,
+        "options": {}
+      },
+      "id": "15898753-5351-4aeb-87fe-b400a6cd1eb0",
+      "name": "Find Template Doc1",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [
+        1860,
+        840
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "fumKiVhN58apfCzA",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1d-6BIDzp3KdkQjZ6_wmOaeqMpHvuapecAyAK0jf70-Q",
+          "mode": "list",
+          "cachedResultName": "email-template",
+          "cachedResultUrl": "https://docs.google.com/document/d/1d-6BIDzp3KdkQjZ6_wmOaeqMpHvuapecAyAK0jf70-Q/edit?usp=drivesdk"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2040,
+        840
+      ],
+      "id": "026d4c21-9db7-40d6-86e5-aea7e5fe21a0",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "fumKiVhN58apfCzA",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get every incoming item as an array\nconst items = $input.all();\n\n// Map array → new array of plain-text templates\nreturn items.map(i => {\n  const b64  = i.binary.data.data;\n  const text = Buffer.from(b64, 'base64').toString('utf-8');\n  return { json: { template: text } };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        840
+      ],
+      "id": "e91df51d-1033-4f9f-a308-76432adf8d3c",
+      "name": "Code A"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "city",
+              "type": "any"
+            },
+            {
+              "name": "preferences",
+              "type": "any"
+            },
+            {
+              "name": "searchText",
+              "type": "any"
+            }
+          ]
+        }
+      },
+      "id": "10663c6e-414e-430f-9d18-93bc267b7fda",
+      "typeVersion": 1.1,
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        1480,
+        1020
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Normalise every record for the Google Sheet\n * (run once for EACH incoming item)\n */\nconst src = item.json            // original data\n\nitem.json = {\n  // 1-for-1 with your header names\n  template : src.template  ?? '',\n  name     : src.name      ?? '',\n  nameAlt  : src.nameAlt   ?? '',\n  address  : src.address   ?? '',\n  Website  : src.website   ?? '',\n  Email    : src.Email     ?? '',\n  email    : src.email     ?? '',\n  body     : src.body      ?? '',\n  Gym_Name : (src.nameAlt || src.name || '').trim(),\n  Draft_URL: src.draftUrl  ?? '',\n};\n\nreturn item;      // 🔴 DON’T forget this\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4200,
+        880
+      ],
+      "id": "13a4a391-2f02-458f-9f6f-0ae028153498",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1gxyQiiVrokJjB1QD3LpdLSW8O_GvfRaiqWvyTkRc6OU",
+          "mode": "list",
+          "cachedResultName": "The GYM Emails",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1gxyQiiVrokJjB1QD3LpdLSW8O_GvfRaiqWvyTkRc6OU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1gxyQiiVrokJjB1QD3LpdLSW8O_GvfRaiqWvyTkRc6OU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "template": "={{$json.template}}",
+            "name": "={{$json.name}}",
+            "nameAlt": "={{$json.nameAlt}}",
+            "address": "={{$json.address}}",
+            "Website": "={{$json.website}}",
+            "Email": "={{$json.Email}}",
+            "email": "={{$json.email}}",
+            "body": "={{$json.body}}",
+            "Gym_Name": "={{$json.nameAlt}}",
+            "Draft_URL": "={{$json.draftUrl}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "template",
+              "displayName": "template",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "nameAlt",
+              "displayName": "nameAlt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "address",
+              "displayName": "address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Gym_Name",
+              "displayName": "Gym_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Draft_URL",
+              "displayName": "Draft_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        4540,
+        880
+      ],
+      "id": "c9b774aa-f50d-43de-8876-def8f134ceea",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XxgWGv9IfOU0lbXO",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "37cbec35-7ca4-4734-8e47-b8f0edd5cdcc",
+              "leftValue": "={{typeof $json.data}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "62029821-27e0-46a1-98e1-4585fd76f21c",
+              "leftValue": "={{$json.data}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3060,
+        1120
+      ],
+      "id": "54d240c3-5efa-4e67-be7e-310adb290e28",
+      "name": "If1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Find Template Doc1": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Places Search1": {
+      "main": [
+        [
+          {
+            "node": "Pick Top ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Top ": {
+      "main": [
+        [
+          {
+            "node": "Split1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split1": {
+      "main": [
+        [
+          {
+            "node": "Code B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch HTML1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Draft1": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Proper Email Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Code A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Email": {
+      "main": [
+        [
+          {
+            "node": "Clean Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proper Email Draft": {
+      "main": [
+        [
+          {
+            "node": "Create Draft1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "String Processing": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "String Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code A": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code B": {
+      "main": [
+        [
+          {
+            "node": "Fetch HTML1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Clean Email": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        []
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Places Search1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find Template Doc1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Return1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "36495cfc-509a-4de5-97d6-331d7113d5b9",
+  "meta": {
+    "instanceId": "e6d9133ca8876c68794cae16d8544151e457393660a3caa96a8a485c7b53676e"
+  },
+  "id": "5lv3IqzgNf74YoDl",
+  "tags": []
+}
